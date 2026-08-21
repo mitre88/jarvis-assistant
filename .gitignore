@@ -1,0 +1,23 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+release/
+
+# environment / secrets
+.env
+.env.*
+
+# OS junk
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# editor
+.idea/
+*.swp
+
+# logs
+npm-debug.log*
+*.log

@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta
+    http-equiv="Content-Security-Policy"
+    content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'"
+  />
+  <title>Jarvis</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <header class="hud-header">
+    <div class="brand">
+      <span class="brand-ring" aria-hidden="true"></span>
+      <span class="brand-name">JARVIS</span>
+    </div>
+    <div class="header-actions">
+      <span id="status-chip" class="status-chip">offline</span>
+      <button id="new-session" class="ghost-btn" title="Start a new conversation">New session</button>
+      <button id="open-settings" class="ghost-btn" title="Settings">Settings</button>
+    </div>
+  </header>
+
+  <main id="feed" class="feed" aria-live="polite">
+    <div id="empty-state" class="empty-state">Standing by.</div>
+  </main>
+
+  <footer class="composer">
+    <textarea
+      id="input"
+      class="composer-input"
+      rows="2"
+      placeholder="Ask Jarvis — Ctrl+Enter (⌘+Enter) to send, Esc to hide"
+    ></textarea>
+    <button id="send" class="send-btn">Send</button>
+  </footer>
+
+  <aside id="settings-panel" class="settings-panel" hidden>
+    <div class="settings-inner">
+      <h2>Settings</h2>
+      <p id="settings-notice" class="settings-notice" hidden></p>
+
+      <label>Provider
+        <select id="s-provider">
+          <option value="openai">OpenAI-compatible (OpenAI, Groq, Together, custom)</option>
+          <option value="anthropic">Anthropic</option>
+          <option value="ollama">Ollama (local)</option>
+          <option value="lmstudio">LM Studio (local)</option>
+        </select>
+      </label>
+
+      <label>Base URL
+        <input id="s-baseurl" type="text" spellcheck="false" />
+      </label>
+
+      <label>API key
+        <input id="s-apikey" type="password" spellcheck="false" autocomplete="off" />
+        <span id="s-apikey-hint" class="field-hint"></span>
+      </label>
+
+      <label>Model
+        <input id="s-model" type="text" spellcheck="false" placeholder="e.g. gpt-4o-mini, claude-sonnet-4-5, llama3.2" />
+      </label>
+
+      <label>Organization <span class="field-optional">optional, OpenAI only</span>
+        <input id="s-org" type="text" spellcheck="false" />
+      </label>
+
+      <label>Extra headers <span class="field-optional">optional, one "Name: value" per line</span>
+        <textarea id="s-headers" rows="2" spellcheck="false"></textarea>
+      </label>
+
+      <label class="check-row">
+        <input id="s-tts" type="checkbox" />
+        Speak replies aloud (text-to-speech)
+      </label>
+
+      <div class="settings-actions">
+        <button id="s-test" class="ghost-btn">Test connection</button>
+        <button id="s-save" class="send-btn">Save</button>
+        <button id="s-close" class="ghost-btn">Close</button>
+      </div>
+      <p id="s-test-result" class="test-result" hidden></p>
+    </div>
+  </aside>
+
+  <div id="confirm-overlay" class="confirm-overlay" hidden>
+    <div class="confirm-box" role="alertdialog" aria-modal="true">
+      <h3 id="confirm-title"></h3>
+      <pre id="confirm-detail"></pre>
+      <div class="confirm-actions">
+        <button id="confirm-deny" class="ghost-btn">Deny</button>
+        <button id="confirm-approve" class="danger-btn">Approve</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
