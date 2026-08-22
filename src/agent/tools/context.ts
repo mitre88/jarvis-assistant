@@ -24,4 +24,18 @@ export interface ToolContext {
   /** Open a file/folder with the OS default handler. "" means success. */
   openPath(p: string): Promise<string>;
   notify(title: string, body: string): void;
+  /** Cancel the current agent run. Tools should stop promptly when aborted. */
+  signal?: AbortSignal;
+  /** Overridable fetch (tests inject a stub). Defaults to global fetch. */
+  fetch?: typeof globalThis.fetch;
+}
+
+export function getFetch(ctx: ToolContext): typeof globalThis.fetch {
+  return ctx.fetch ?? globalThis.fetch;
+}
+
+export function throwIfAborted(ctx: ToolContext): void {
+  if (ctx.signal?.aborted) {
+    throw new Error("Cancelled by the user.");
+  }
 }

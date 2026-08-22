@@ -14,6 +14,10 @@ export interface ProviderSettings {
 export interface Settings extends ProviderSettings {
   /** Speak Jarvis replies aloud via speechSynthesis. */
   tts: boolean;
+  /** Agent loop tool-round budget (1–32). */
+  maxToolIterations: number;
+  /** Additional filesystem roots besides the home directory. */
+  extraRoots: string[];
 }
 
 /** What the renderer sees. The API key itself never crosses the bridge. */
@@ -41,8 +45,29 @@ export interface ConfirmRequest {
   detail: string;
 }
 
+export interface SessionMeta {
+  id: string;
+  title: string;
+  updatedAt: string;
+}
+
+/** A feed-visible turn reconstructed from a persisted session. */
+export interface ChatBubble {
+  kind: "user" | "assistant" | "tool";
+  content: string;
+  name?: string;
+}
+
+export interface SessionView {
+  id: string;
+  title: string;
+  updatedAt: string;
+  messages: ChatBubble[];
+}
+
 /** The API exposed to the renderer by the preload script. */
 export interface JarvisApi {
+  platform: string;
   getSettings(): Promise<SettingsView>;
   saveSettings(update: SettingsUpdate): Promise<SettingsView>;
   testConnection(update: SettingsUpdate): Promise<TestConnectionResult>;
@@ -51,6 +76,11 @@ export interface JarvisApi {
   resetChat(): void;
   respondConfirm(id: string, approved: boolean): void;
   hideWindow(): void;
+  listSessions(): Promise<SessionMeta[]>;
+  getCurrentSession(): Promise<SessionView>;
+  loadSession(id: string): Promise<SessionView>;
+  deleteSession(id: string): Promise<{ sessions: SessionMeta[]; current: SessionView }>;
+  newSession(): Promise<SessionView>;
   onAgentEvent(cb: (event: AgentEvent) => void): void;
 }
 
@@ -63,4 +93,5 @@ export type AgentEvent =
   | { type: "confirm-request"; request: ConfirmRequest }
   | { type: "confirm-settled"; id: string }
   | { type: "done"; text: string }
-  | { type: "error"; message: string };
+  | { type: "error"; message: string }
+  | { type: "sessions-changed"; sessions: SessionMeta[]; currentId: string };

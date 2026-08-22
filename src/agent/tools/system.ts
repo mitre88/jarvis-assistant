@@ -10,6 +10,7 @@ function formatUptime(seconds: number): string {
 
 export const systemInfoTool: ToolDef = {
   name: "system_info",
+  readOnly: true,
   description:
     "Report on the host machine: OS, version, hostname, architecture, CPU, memory, uptime, and the user's home directory.",
   parameters: { type: "object", properties: {}, additionalProperties: false },
@@ -33,6 +34,7 @@ export const systemInfoTool: ToolDef = {
 
 export const datetimeTool: ToolDef = {
   name: "datetime",
+  readOnly: true,
   description: "Current local date, time, timezone, and UTC offset.",
   parameters: { type: "object", properties: {}, additionalProperties: false },
   async execute() {

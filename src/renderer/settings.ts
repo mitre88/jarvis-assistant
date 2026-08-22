@@ -1,16 +1,21 @@
 /** Settings panel: provider config, connection test, persistence. */
 import { PROVIDER_DEFAULTS } from "../shared/provider-defaults.js";
 import type { ProviderKind, SettingsUpdate, SettingsView } from "../shared/types.js";
+import { showToast } from "./toast.js";
 
 const panel = document.getElementById("settings-panel") as HTMLElement;
+const backdrop = document.getElementById("settings-backdrop") as HTMLElement;
 const notice = document.getElementById("settings-notice") as HTMLElement;
 const providerEl = document.getElementById("s-provider") as HTMLSelectElement;
 const baseUrlEl = document.getElementById("s-baseurl") as HTMLInputElement;
 const apiKeyEl = document.getElementById("s-apikey") as HTMLInputElement;
 const apiKeyHint = document.getElementById("s-apikey-hint") as HTMLElement;
 const modelEl = document.getElementById("s-model") as HTMLInputElement;
+const modelList = document.getElementById("s-models") as HTMLDataListElement;
 const orgEl = document.getElementById("s-org") as HTMLInputElement;
 const headersEl = document.getElementById("s-headers") as HTMLTextAreaElement;
+const iterationsEl = document.getElementById("s-iterations") as HTMLInputElement;
+const rootsEl = document.getElementById("s-roots") as HTMLTextAreaElement;
 const ttsEl = document.getElementById("s-tts") as HTMLInputElement;
 const testBtn = document.getElementById("s-test") as HTMLButtonElement;
 const saveBtn = document.getElementById("s-save") as HTMLButtonElement;
@@ -37,6 +42,15 @@ function serializeHeaders(headers: Record<string, string>): string {
   return Object.entries(headers)
     .map(([k, v]) => `${k}: ${v}`)
     .join("\n");
+}
+
+function fillModelList(models: string[] | undefined): void {
+  modelList.replaceChildren();
+  for (const m of models ?? []) {
+    const opt = document.createElement("option");
+    opt.value = m;
+    modelList.append(opt);
+  }
 }
 
 function updateKeyHint(): void {
@@ -73,6 +87,8 @@ function fill(view: SettingsView): void {
   modelEl.value = view.model;
   orgEl.value = view.organization;
   headersEl.value = serializeHeaders(view.extraHeaders);
+  iterationsEl.value = String(view.maxToolIterations ?? 8);
+  rootsEl.value = (view.extraRoots ?? []).join("\n");
   ttsEl.checked = view.tts;
   apiKeyEl.value = "";
   hasStoredKey = view.hasApiKey;
@@ -82,6 +98,7 @@ function fill(view: SettingsView): void {
 
 function collect(): SettingsUpdate {
   const typed = apiKeyEl.value;
+  const iterations = Number(iterationsEl.value);
   return {
     provider: providerEl.value as ProviderKind,
     baseUrl: baseUrlEl.value.trim(),
@@ -89,6 +106,11 @@ function collect(): SettingsUpdate {
     organization: orgEl.value.trim(),
     extraHeaders: parseHeaders(headersEl.value),
     tts: ttsEl.checked,
+    maxToolIterations: Number.isFinite(iterations) ? iterations : 8,
+    extraRoots: rootsEl.value
+      .split("\n")
+      .map((l) => l.trim())
+      .filter(Boolean),
     apiKey: clearKey ? "" : typed !== "" ? typed : undefined,
   };
 }
@@ -113,6 +135,8 @@ testBtn.addEventListener("click", async () => {
     const result = await window.jarvis.testConnection(collect());
     testResult.classList.add(result.ok ? "ok" : "fail");
     testResult.textContent = result.detail;
+    fillModelList(result.models);
+    showToast(result.ok ? result.detail : "Connection failed", result.ok ? "ok" : "err");
   } finally {
     testBtn.disabled = false;
   }
@@ -122,10 +146,12 @@ saveBtn.addEventListener("click", async () => {
   const view = await window.jarvis.saveSettings(collect());
   fill(view);
   onSaved(view);
+  showToast("Settings saved", "ok");
   closeSettings();
 });
 
 closeBtn.addEventListener("click", () => closeSettings());
+backdrop.addEventListener("click", () => closeSettings());
 
 export function initSettings(
   view: SettingsView,
@@ -140,15 +166,23 @@ export function openSettings(noticeText?: string): void {
   notice.textContent = noticeText ?? "";
   testResult.hidden = true;
   panel.hidden = false;
-  requestAnimationFrame(() => panel.classList.add("open"));
+  backdrop.hidden = false;
+  requestAnimationFrame(() => {
+    panel.classList.add("open");
+    backdrop.classList.add("open");
+  });
 }
 
 export function closeSettings(): void {
   panel.classList.remove("open");
+  backdrop.classList.remove("open");
   panel.addEventListener(
     "transitionend",
     () => {
-      if (!panel.classList.contains("open")) panel.hidden = true;
+      if (!panel.classList.contains("open")) {
+        panel.hidden = true;
+        backdrop.hidden = true;
+      }
     },
     { once: true }
   );

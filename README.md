@@ -5,13 +5,14 @@ A local desktop AI assistant for Windows and macOS. Dark HUD, dry wit, real tool
 Jarvis is **bring-your-own-model**: you point it at OpenAI, Anthropic, any
 OpenAI-compatible endpoint (Groq, Together, custom gateways), or a local model
 served by Ollama or LM Studio. The app ships no API keys and phones home to
-no one — the only network traffic is to the provider you configure.
+no one — the only network traffic is to the provider you configure, plus
+optional web tools (`web_search` / `fetch_url`) when the model uses them.
 
 Beyond chat, Jarvis runs a tool-calling agent loop in the Electron main
-process. The model can inspect the system, read and write files in your home
-directory, run shell commands, manage the clipboard, open URLs and files, keep
-durable notes, and send native notifications — with your explicit approval for
-anything that mutates state.
+process. The model can inspect the system, search and edit files in your
+workspace, run shell commands, search the public web, manage the clipboard,
+open URLs and files, keep durable notes, and send native notifications — with
+your explicit approval for anything that mutates state.
 
 ## Run it
 
@@ -48,12 +49,29 @@ provider:
 | LM Studio | `http://127.0.0.1:1234` | none | model id from LM Studio |
 
 A trailing `/v1` in the base URL is tolerated and stripped. **Test connection**
-performs a live request against the provider's model listing endpoint and
-reports what it finds. Tool calling must be supported by the model you choose;
-small local models vary in how well they use tools.
+performs a live request against the provider's model listing endpoint, reports
+what it finds, and fills the model dropdown. Tool calling must be supported by
+the model you choose; small local models vary in how well they use tools.
 
 For local providers: start Ollama (`ollama serve`, then `ollama pull llama3.2`)
 or LM Studio's local server first.
+
+## What Jarvis can do
+
+| Tool | Role |
+|---|---|
+| `system_info`, `datetime` | Host facts, local clock |
+| `list_dir`, `read_file`, `grep_files` | Browse and search the workspace |
+| `write_file`, `append_file`, `delete_file` | Edit files (approval required) |
+| `run_command` | Shell (read-only allowlist; mutations need approval; Stop kills the process) |
+| `web_search`, `fetch_url` | Public web search (DuckDuckGo) and page fetch; private/local IPs blocked |
+| `open_url`, `open_path` | Browser / default app (executables need approval) |
+| `clipboard_read`, `clipboard_write` | Clipboard (writes need approval) |
+| `remember`, `recall`, `search_memory` | Durable notes, newest first |
+| `notify` | Native desktop notification |
+
+Conversations persist across restarts (sidebar). Extra workspace roots and the
+tool-round budget (1–32, default 8) live in Settings.
 
 ## Where things live
 
@@ -62,22 +80,29 @@ or LM Studio's local server first.
   directory. Never in the repo, never in tracked files. If the OS provides no
   encryption backend (some bare Linux setups), the key is stored base64-encoded
   without encryption — treat that machine accordingly.
-- **Preferences** (provider, base URL, model, TTS) — plain JSON in the
-  user-data directory.
-- **Memory** (`remember`/`recall` notes) — a small JSON file in the same place.
+- **Preferences** (provider, base URL, model, TTS, extra roots, tool rounds) —
+  plain JSON in the user-data directory.
+- **Sessions** — one JSON file per conversation under `sessions/` in user-data.
+- **Memory** (`remember` / `recall` notes) — a small JSON file in the same place.
 
 ## Security model
 
-- **Path sandbox**: file tools (`list_dir`, `read_file`, `write_file`,
-  `open_path`) resolve every path — including `..` and symlinks — and refuse
-  anything outside your home directory.
-- **Write confirmation**: every `write_file` shows an in-app approval dialog
-  stating the path and whether it's a create or an overwrite.
+- **Path sandbox**: file tools resolve every path — including `..` and
+  symlinks — and refuse anything outside your home directory or extra roots.
+- **Write confirmation**: `write_file`, `append_file`, and `delete_file` show
+  an in-app approval dialog. Pending confirms time out after 60 seconds (deny).
 - **Shell confirmation**: `run_command` runs provably read-only commands
   (`ls`, `cat`, `git status`, …) directly; anything else — unknown binaries,
   redirects, `rm`, `sudo`, command substitution — requires your approval.
-  Commands are killed after a timeout and output is capped at 64 KB.
-- **Iteration cap**: the agent loop stops after a fixed number of tool rounds.
+  Commands are killed after a timeout, on Stop, and output is capped at 64 KB.
+- **Web SSRF guard**: `fetch_url` / `web_search` refuse `file:`, localhost,
+  private, and link-local addresses (including after DNS).
+- **Clipboard / executables**: replacing the clipboard or opening an
+  executable requires approval.
+- **Iteration cap**: the agent loop stops after a configurable number of tool
+  rounds, then asks the model for a final reply with tools disabled.
+- **Context trim**: only the last 16 user turns go to the model; oversized
+  tool results are clipped so file dumps do not grow the window without bound.
 - **Renderer isolation**: context isolation and a sandboxed renderer; the UI
   talks to the system only through a narrow preload bridge. API keys never
   reach the renderer.
@@ -86,6 +111,7 @@ or LM Studio's local server first.
 
 - `Ctrl+Enter` / `Cmd+Enter` — send
 - `Esc` — deny an open confirmation, close settings, or hide to tray
+- `Enter` — approve the focused confirmation dialog
 
 The tray icon toggles the window; quitting is in the tray menu. Optional
 text-to-speech for replies can be enabled in Settings.
@@ -97,13 +123,13 @@ needs Google API keys inside Electron, and shipping a broken mic helps no one.
 
 ```
 src/
-  main/       Electron main: window, tray, IPC host, prefs, keychain secrets
+  main/       Electron main: window, tray, IPC host, prefs, sessions, keychain
   preload/    contextBridge — the only door between UI and system
-  renderer/   vanilla TS HUD: chat feed, settings panel, confirm dialogs, TTS
+  renderer/   vanilla TS HUD: chat feed, session sidebar, settings, toasts, TTS
   agent/      provider clients (OpenAI-compatible, Anthropic, Ollama),
-              the tool-calling loop, and the tool registry
+              the tool-calling loop, context trim, and the tool registry
   shared/     types + provider defaults shared across processes
-tests/        node:test suites: sandbox, command heuristic, providers, loop, tools
+tests/        node:test suites: sandbox, tools, loop, context, sessions, web
 ```
 
 Zero runtime dependencies — providers are called with `fetch`, streaming is

@@ -4,12 +4,14 @@ import {
   addToolCall,
   addUserMessage,
   appendToken,
-  clearFeed,
   finishStreaming,
+  hasVisibleMessages,
+  onEmptySettingsClick,
   setEmptyStateText,
   setToolResult,
 } from "./chat.js";
 import { denyCurrent, isConfirmOpen, pushConfirmRequest, settleConfirm } from "./confirm.js";
+import { applySession, initSessions, renderSessionList } from "./sessions.js";
 import { initSettings, isSettingsOpen, openSettings, closeSettings } from "./settings.js";
 import { setTtsEnabled, speak } from "./speech.js";
 import { PROVIDER_DEFAULTS } from "../shared/provider-defaults.js";
@@ -22,24 +24,39 @@ const newSessionBtn = document.getElementById("new-session") as HTMLButtonElemen
 const openSettingsBtn = document.getElementById("open-settings") as HTMLButtonElement;
 
 let running = false;
+let configured = false;
 const pendingToolRows: HTMLElement[] = [];
+
+type Activity = "offline" | "idle" | "thinking" | "streaming" | "error";
+
+function setActivity(state: Activity): void {
+  statusChip.dataset.state = state;
+  const model = statusChip.dataset.model ?? "";
+  if (!configured) {
+    statusChip.textContent = "not configured";
+    return;
+  }
+  statusChip.textContent = model ? `${state} · ${model}` : state;
+}
 
 function setRunning(on: boolean): void {
   running = on;
   sendBtn.textContent = on ? "Stop" : "Send";
   sendBtn.classList.toggle("danger-btn", on);
+  if (!on && configured) setActivity("idle");
 }
 
 function applySettings(view: SettingsView): void {
   setTtsEnabled(view.tts);
+  configured = Boolean(view.model);
   if (view.model) {
-    statusChip.textContent = `${PROVIDER_DEFAULTS[view.provider].label} · ${view.model}`;
-    statusChip.classList.add("online");
-    setEmptyStateText("Standing by.");
+    statusChip.dataset.model = `${PROVIDER_DEFAULTS[view.provider].label} · ${view.model}`;
+    setEmptyStateText("Standing by.", false);
+    setActivity(running ? "thinking" : "idle");
   } else {
-    statusChip.textContent = "not configured";
-    statusChip.classList.remove("online");
-    setEmptyStateText("No provider configured.");
+    statusChip.dataset.model = "";
+    setEmptyStateText("No provider configured.", true);
+    setActivity("offline");
   }
 }
 
@@ -49,7 +66,18 @@ function send(): void {
   input.value = "";
   addUserMessage(text);
   setRunning(true);
+  setActivity("thinking");
   window.jarvis.send(text);
+}
+
+async function startNewSession(): Promise<void> {
+  if (hasVisibleMessages() && !window.confirm("Start a new session? The current chat is saved.")) {
+    return;
+  }
+  const view = await window.jarvis.newSession();
+  pendingToolRows.length = 0;
+  await applySession(view);
+  setRunning(false);
 }
 
 sendBtn.addEventListener("click", () => {
@@ -61,13 +89,11 @@ sendBtn.addEventListener("click", () => {
 });
 
 newSessionBtn.addEventListener("click", () => {
-  window.jarvis.resetChat();
-  pendingToolRows.length = 0;
-  clearFeed();
-  setRunning(false);
+  void startNewSession();
 });
 
 openSettingsBtn.addEventListener("click", () => openSettings());
+onEmptySettingsClick(() => openSettings());
 
 document.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
@@ -90,8 +116,10 @@ window.jarvis.onAgentEvent((event) => {
   switch (event.type) {
     case "run-start":
       setRunning(true);
+      setActivity("thinking");
       break;
     case "token":
+      setActivity("streaming");
       appendToken(event.text);
       break;
     case "tool-call":
@@ -115,15 +143,24 @@ window.jarvis.onAgentEvent((event) => {
       break;
     case "error":
       addErrorMessage(event.message);
+      setActivity("error");
       setRunning(false);
+      break;
+    case "sessions-changed":
+      renderSessionList(event.sessions, event.currentId);
       break;
   }
 });
 
 void (async () => {
+  document.body.dataset.platform = window.jarvis.platform;
+  initSessions();
   const view = await window.jarvis.getSettings();
   initSettings(view, applySettings);
   applySettings(view);
+  const session = await window.jarvis.getCurrentSession();
+  const sessions = await window.jarvis.listSessions();
+  await applySession(session, sessions);
   if (!view.model) {
     openSettings("No provider configured. Point Jarvis at your model to bring it online.");
   }

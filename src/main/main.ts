@@ -15,13 +15,27 @@ let quitting = false;
 
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
-    width: 980,
-    height: 720,
-    minWidth: 640,
-    minHeight: 480,
+    width: 1100,
+    height: 740,
+    minWidth: 720,
+    minHeight: 520,
     backgroundColor: "#0a0f16",
     autoHideMenuBar: true,
     icon: path.join(ROOT, "build", "icon.png"),
+    ...(process.platform === "linux"
+      ? {}
+      : {
+          titleBarStyle: "hidden" as const,
+          ...(process.platform === "darwin"
+            ? { trafficLightPosition: { x: 14, y: 13 } }
+            : {
+                titleBarOverlay: {
+                  color: "#0a0f16",
+                  symbolColor: "#cfe3ec",
+                  height: 40,
+                },
+              }),
+        }),
     webPreferences: {
       preload: path.join(__dirname, "..", "preload", "preload.js"),
       contextIsolation: true,
