@@ -1,0 +1,55 @@
+{
+  "name": "jarvis-assistant",
+  "version": "0.2.1",
+  "description": "Jarvis — a local desktop AI assistant. Bring your own model.",
+  "author": "mitre88",
+  "license": "MIT",
+  "private": true,
+  "main": "dist/src/main/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json && tsc -p tsconfig.renderer.json && node scripts/copy-static.mjs",
+    "start": "npm run build && electron .",
+    "test": "tsc -p tsconfig.json && node --test dist/tests/*.test.js",
+    "pack": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder",
+    "dist:all": "npm run build && electron-builder -mw"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "electron": "^43.4.1",
+    "electron-builder": "^26.15.3",
+    "typescript": "^7.0.2"
+  },
+  "build": {
+    "appId": "com.mitre88.jarvis-assistant",
+    "productName": "Jarvis",
+    "files": [
+      "dist/src/**",
+      "dist/renderer/**",
+      "dist/shared/**",
+      "assets/**",
+      "!dist/tests/**"
+    ],
+    "directories": {
+      "buildResources": "build",
+      "output": "release"
+    },
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ]
+    }
+  }
+}
