@@ -9,7 +9,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json && tsc -p tsconfig.renderer.json && node scripts/copy-static.mjs",
     "start": "npm run build && electron .",
-    "test": "tsc -p tsconfig.json && node --test \"dist/tests/*.test.js\"",
+    "test": "tsc -p tsconfig.json && node --test dist/tests/*.test.js",
     "pack": "npm run build && electron-builder --dir",
     "dist": "npm run build && electron-builder",
     "dist:all": "npm run build && electron-builder -mw"
