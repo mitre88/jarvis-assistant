@@ -1,13 +1,15 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { after, describe, it } from "node:test";
 import { resolveSafe, SandboxViolation } from "../src/agent/tools/sandbox";
 
 describe("path sandbox", () => {
-  const home = mkdtempSync(path.join(tmpdir(), "jarvis-home-"));
-  const outside = mkdtempSync(path.join(tmpdir(), "jarvis-outside-"));
+  // Canonicalize: on macOS tmpdir() lives under /var, a symlink to /private/var,
+  // and resolveSafe returns canonical paths.
+  const home = realpathSync.native(mkdtempSync(path.join(tmpdir(), "jarvis-home-")));
+  const outside = realpathSync.native(mkdtempSync(path.join(tmpdir(), "jarvis-outside-")));
   const roots = [home];
 
   after(() => {
