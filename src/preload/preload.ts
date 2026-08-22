@@ -7,6 +7,7 @@ const api: JarvisApi = {
   saveSettings: (update) => ipcRenderer.invoke("settings:save", update),
   testConnection: (update) => ipcRenderer.invoke("settings:test", update),
   send: (text) => ipcRenderer.send("chat:send", text),
+  retry: () => ipcRenderer.send("chat:retry"),
   cancel: () => ipcRenderer.send("chat:cancel"),
   resetChat: () => ipcRenderer.send("chat:reset"),
   respondConfirm: (id, approved) => ipcRenderer.send("confirm:response", id, approved),

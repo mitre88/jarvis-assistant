@@ -108,12 +108,22 @@ export function setToolResult(row: HTMLElement, summary: string, isError: boolea
   scrollToBottom();
 }
 
-export function addErrorMessage(message: string): void {
+export function addErrorMessage(message: string, onRetry?: () => void): void {
   hideEmptyState();
   finishStreaming();
   const el = document.createElement("div");
   el.className = "msg error";
-  el.textContent = message;
+  const text = document.createElement("div");
+  text.textContent = message;
+  el.append(text);
+  if (onRetry) {
+    const retry = document.createElement("button");
+    retry.type = "button";
+    retry.className = "ghost-btn error-retry";
+    retry.textContent = "Retry";
+    retry.addEventListener("click", onRetry);
+    el.append(retry);
+  }
   feed.appendChild(el);
   scrollToBottom();
 }

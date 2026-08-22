@@ -24,6 +24,71 @@ export function normalizeBaseUrl(raw: string, fallback: string): string {
   return base;
 }
 
+export function retryDelayMs(attempt: number, retryAfter?: string | null): number {
+  if (retryAfter) {
+    const seconds = Number(retryAfter);
+    if (Number.isFinite(seconds) && seconds >= 0) return Math.min(seconds * 1000, 8_000);
+  }
+  return Math.min(300 * 2 ** attempt, 4_000);
+}
+
+export function shouldRetryStatus(status: number): boolean {
+  return status === 429 || status >= 500;
+}
+
+async function defaultDelay(ms: number, signal?: AbortSignal): Promise<void> {
+  if (ms <= 0) return;
+  await new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(resolve, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(signal?.reason ?? new Error("Aborted"));
+    };
+    if (signal) {
+      if (signal.aborted) {
+        clearTimeout(timer);
+        reject(signal.reason ?? new Error("Aborted"));
+        return;
+      }
+      signal.addEventListener("abort", onAbort, { once: true });
+    }
+  });
+}
+
+/**
+ * Retry transient provider failures (429 / 5xx / network) before the body is
+ * consumed. Streaming responses are only retried when the status itself fails.
+ */
+export function withRetries(
+  fetchImpl: FetchLike,
+  opts?: {
+    retries?: number;
+    delay?: (ms: number, signal?: AbortSignal) => Promise<void>;
+  }
+): FetchLike {
+  const retries = opts?.retries ?? 3;
+  const delay = opts?.delay ?? defaultDelay;
+  return async (url, init) => {
+    let lastErr: unknown;
+    for (let attempt = 0; attempt < retries; attempt++) {
+      if (init.signal?.aborted) throw init.signal.reason ?? new Error("Aborted");
+      try {
+        const res = await fetchImpl(url, init);
+        if (res.ok || !shouldRetryStatus(res.status) || attempt === retries - 1) {
+          return res;
+        }
+        await delay(retryDelayMs(attempt, res.headers.get("retry-after")), init.signal);
+      } catch (err) {
+        lastErr = err;
+        if (init.signal?.aborted) throw err;
+        if (attempt === retries - 1) throw err;
+        await delay(retryDelayMs(attempt), init.signal);
+      }
+    }
+    throw lastErr instanceof Error ? lastErr : new Error("Provider request failed");
+  };
+}
+
 export async function readErrorBody(res: Response): Promise<string> {
   try {
     const text = (await res.text()).slice(0, 300);

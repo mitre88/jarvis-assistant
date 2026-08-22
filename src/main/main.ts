@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Tray } from "electron";
+import { app, BrowserWindow, Tray, globalShortcut } from "electron";
 import * as path from "node:path";
 import { AgentHost } from "./ipc";
 import { PrefsStore } from "./prefs";
@@ -72,6 +72,24 @@ if (!gotLock) {
     const userData = app.getPath("userData");
     const host = new AgentHost(window, new PrefsStore(userData), new SecretStore(userData), userData);
     host.register();
+
+    const accel = process.platform === "darwin" ? "Command+Shift+J" : "Control+Shift+J";
+    const ok = globalShortcut.register(accel, () => {
+      if (!window) return;
+      if (window.isVisible() && window.isFocused()) {
+        window.hide();
+      } else {
+        window.show();
+        window.focus();
+      }
+    });
+    if (!ok) {
+      console.warn(`Jarvis: could not register global shortcut ${accel}`);
+    }
+  });
+
+  app.on("will-quit", () => {
+    globalShortcut.unregisterAll();
   });
 
   app.on("before-quit", () => {

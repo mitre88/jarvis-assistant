@@ -8,6 +8,7 @@ import {
   appendFileTool,
   deleteFileTool,
   listDirTool,
+  moveFileTool,
   readFileTool,
   writeFileTool,
 } from "../src/agent/tools/fs";
@@ -39,6 +40,16 @@ describe("filesystem tools", () => {
   it("read_file returns content", async () => {
     const out = await readFileTool.execute({ path: "a.txt" }, fakeContext({ home }));
     assert.equal(out, "hello");
+  });
+
+  it("read_file pages with offset and limit", async () => {
+    writeFileSync(path.join(home, "paged.txt"), "ABCDEFGHIJ");
+    const slice = await readFileTool.execute(
+      { path: "paged.txt", offset: 2, limit: 4 },
+      fakeContext({ home })
+    );
+    assert.match(slice, /^CDEF/);
+    assert.match(slice, /offset=6/);
   });
 
   it("read_file refuses paths outside the sandbox", async () => {
@@ -100,6 +111,15 @@ describe("filesystem tools", () => {
     );
     assert.match(ok, /Deleted/);
     assert.ok(!existsSync(path.join(home, "doomed.txt")));
+  });
+
+  it("move_file relocates after approval", async () => {
+    writeFileSync(path.join(home, "src.txt"), "cargo");
+    const ctx = fakeContext({ home, approve: true });
+    const out = await moveFileTool.execute({ from: "src.txt", to: "dest/out.txt" }, ctx);
+    assert.match(out, /Moved/);
+    assert.ok(!existsSync(path.join(home, "src.txt")));
+    assert.equal(readFileSync(path.join(home, "dest", "out.txt"), "utf8"), "cargo");
   });
 
   it("grep_files finds a line under the workspace", async () => {
@@ -276,6 +296,7 @@ describe("tool registry", () => {
       "fetch_url",
       "grep_files",
       "list_dir",
+      "move_file",
       "notify",
       "open_path",
       "open_url",

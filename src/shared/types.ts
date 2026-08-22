@@ -72,6 +72,7 @@ export interface JarvisApi {
   saveSettings(update: SettingsUpdate): Promise<SettingsView>;
   testConnection(update: SettingsUpdate): Promise<TestConnectionResult>;
   send(text: string): void;
+  retry(): void;
   cancel(): void;
   resetChat(): void;
   respondConfirm(id: string, approved: boolean): void;

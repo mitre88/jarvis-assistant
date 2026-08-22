@@ -62,7 +62,7 @@ or LM Studio's local server first.
 |---|---|
 | `system_info`, `datetime` | Host facts, local clock |
 | `list_dir`, `read_file`, `grep_files` | Browse and search the workspace |
-| `write_file`, `append_file`, `delete_file` | Edit files (approval required) |
+| `write_file`, `append_file`, `delete_file`, `move_file` | Edit files (approval required) |
 | `run_command` | Shell (read-only allowlist; mutations need approval; Stop kills the process) |
 | `web_search`, `fetch_url` | Public web search (DuckDuckGo) and page fetch; private/local IPs blocked |
 | `open_url`, `open_path` | Browser / default app (executables need approval) |
@@ -83,13 +83,15 @@ tool-round budget (1–32, default 8) live in Settings.
 - **Preferences** (provider, base URL, model, TTS, extra roots, tool rounds) —
   plain JSON in the user-data directory.
 - **Sessions** — one JSON file per conversation under `sessions/` in user-data.
+  The newest durable notes are injected into the system prompt at the start of
+  each run.
 - **Memory** (`remember` / `recall` notes) — a small JSON file in the same place.
 
 ## Security model
 
 - **Path sandbox**: file tools resolve every path — including `..` and
   symlinks — and refuse anything outside your home directory or extra roots.
-- **Write confirmation**: `write_file`, `append_file`, and `delete_file` show
+- **Write confirmation**: `write_file`, `append_file`, `delete_file`, and `move_file` show
   an in-app approval dialog. Pending confirms time out after 60 seconds (deny).
 - **Shell confirmation**: `run_command` runs provably read-only commands
   (`ls`, `cat`, `git status`, …) directly; anything else — unknown binaries,
@@ -110,8 +112,10 @@ tool-round budget (1–32, default 8) live in Settings.
 ## Keyboard
 
 - `Ctrl+Enter` / `Cmd+Enter` — send
+- `Ctrl+Shift+J` / `Cmd+Shift+J` — summon or hide Jarvis from anywhere
 - `Esc` — deny an open confirmation, close settings, or hide to tray
 - `Enter` — approve the focused confirmation dialog
+- **Retry** on an error bubble re-sends the last prompt (provider 429/5xx are also retried automatically)
 
 The tray icon toggles the window; quitting is in the tray menu. Optional
 text-to-speech for replies can be enabled in Settings.

@@ -11,10 +11,12 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { randomUUID } from "node:crypto";
 import { runAgent } from "../agent/loop";
+import { upsertMemoryMessage } from "../agent/memory-context";
 import { SYSTEM_PROMPT } from "../agent/prompt";
 import { createProvider, testConnection, type ProviderHttpConfig } from "../agent/providers";
 import { createStandardRegistry } from "../agent/tools";
 import type { ToolContext } from "../agent/tools/context";
+import { recentNotesText } from "../agent/tools/memory";
 import type {
   AgentEvent,
   SessionMeta,
@@ -204,6 +206,10 @@ export class AgentHost {
       void this.run(text);
     });
 
+    ipcMain.on("chat:retry", () => {
+      void this.retry();
+    });
+
     ipcMain.on("chat:cancel", () => this.abort?.abort());
 
     ipcMain.on("chat:reset", () => {
@@ -218,15 +224,40 @@ export class AgentHost {
     ipcMain.on("window:hide", () => this.window.hide());
   }
 
+  private lastUserIndex(): number {
+    for (let i = this.session.messages.length - 1; i >= 0; i--) {
+      if (this.session.messages[i]?.role === "user") return i;
+    }
+    return -1;
+  }
+
+  private async retry(): Promise<void> {
+    if (this.abort) return;
+    const idx = this.lastUserIndex();
+    if (idx < 0) {
+      this.emit({ type: "error", message: "Nothing to retry." });
+      return;
+    }
+    this.session.messages = this.session.messages.slice(0, idx + 1);
+    await this.executeRun();
+  }
+
   private async run(text: string): Promise<void> {
-    if (this.abort) return; // one run at a time; renderer disables send too
+    if (this.abort) return;
+    this.session.messages.push({ role: "user", content: text });
+    await this.executeRun();
+  }
+
+  private async executeRun(): Promise<void> {
+    if (this.abort) return;
     const { kind, cfg } = this.providerConfig();
     if (!cfg.model) {
       this.emit({ type: "error", message: "No model configured. Open Settings first." });
       return;
     }
     this.abort = new AbortController();
-    this.session.messages.push({ role: "user", content: text });
+    const memoryFile = path.join(this.userDataDir, "memory.json");
+    upsertMemoryMessage(this.session.messages, await recentNotesText(memoryFile));
     this.persistAndBroadcast();
     this.emit({ type: "run-start" });
     try {

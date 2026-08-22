@@ -60,14 +60,24 @@ function applySettings(view: SettingsView): void {
   }
 }
 
+let canRetry = false;
+
 function send(): void {
   const text = input.value.trim();
   if (!text || running) return;
   input.value = "";
   addUserMessage(text);
+  canRetry = true;
   setRunning(true);
   setActivity("thinking");
   window.jarvis.send(text);
+}
+
+function retryLast(): void {
+  if (running || !canRetry) return;
+  setRunning(true);
+  setActivity("thinking");
+  window.jarvis.retry();
 }
 
 async function startNewSession(): Promise<void> {
@@ -139,10 +149,11 @@ window.jarvis.onAgentEvent((event) => {
     case "done":
       finishStreaming();
       speak(event.text);
+      canRetry = false;
       setRunning(false);
       break;
     case "error":
-      addErrorMessage(event.message);
+      addErrorMessage(event.message, canRetry ? retryLast : undefined);
       setActivity("error");
       setRunning(false);
       break;

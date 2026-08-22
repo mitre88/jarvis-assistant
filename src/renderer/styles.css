@@ -359,6 +359,11 @@ body[data-platform="win32"] .hud-header { padding-right: 140px; }
   padding: 1px 4px;
 }
 
+.msg.error .error-retry {
+  margin-top: 8px;
+  font-size: 12px;
+}
+
 .msg.error {
   align-self: center;
   color: var(--red);

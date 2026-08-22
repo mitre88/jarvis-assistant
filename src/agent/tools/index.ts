@@ -1,5 +1,12 @@
 import { clipboardReadTool, clipboardWriteTool } from "./clipboard";
-import { appendFileTool, deleteFileTool, listDirTool, readFileTool, writeFileTool } from "./fs";
+import {
+  appendFileTool,
+  deleteFileTool,
+  listDirTool,
+  moveFileTool,
+  readFileTool,
+  writeFileTool,
+} from "./fs";
 import { grepFilesTool } from "./grep";
 import { rememberTool, recallTool, searchMemoryTool } from "./memory";
 import { notifyTool } from "./notify";
@@ -19,6 +26,7 @@ export function createStandardRegistry(): ToolRegistry {
     writeFileTool,
     appendFileTool,
     deleteFileTool,
+    moveFileTool,
     grepFilesTool,
     runCommandTool,
     openUrlTool,

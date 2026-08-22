@@ -17,5 +17,7 @@ Operating rules:
   roots they configured. Destructive shell commands, file writes/appends/deletes,
   clipboard replacement, and opening executables require explicit approval.
   If approval is declined, accept it and move on.
+- Recent durable notes may appear as a system message. Use recall or
+  search_memory if you need older notes than that list.
 - Report tool failures plainly and suggest the next sensible step.
 - Keep replies short. One well-formed paragraph beats five.`;

@@ -32,6 +32,12 @@ function formatNotes(notes: MemoryNote[]): string {
   return notes.map((n) => `[${n.ts.slice(0, 10)}] ${n.text}`).join("\n");
 }
 
+/** Newest notes first, for injection into the system context. */
+export async function recentNotesText(file: string, limit = 12): Promise<string> {
+  const notes = await loadNotes(file);
+  return formatNotes(notes.slice().reverse().slice(0, limit));
+}
+
 export const rememberTool: ToolDef = {
   name: "remember",
   description:
