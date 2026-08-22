@@ -109,7 +109,7 @@ describe("agent loop", () => {
   });
 
   it("asks for a final reply without tools when the iteration cap is hit", async () => {
-    const turns: StreamEvent[][] = Array.from({ length: 3 }, (_, i) => [
+    const turns: StreamEvent[][] = Array.from({ length: 4 }, (_, i) => [
       {
         type: "tool-calls" as const,
         calls: [{ id: `c${i}`, name: "datetime", arguments: "{}" }],

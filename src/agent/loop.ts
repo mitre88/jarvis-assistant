@@ -80,6 +80,9 @@ async function executeCalls(opts: AgentRunOptions, calls: ToolCall[]): Promise<v
     const outcomes: ToolOutcome[] = await Promise.all(
       calls.map((call) => opts.registry.execute(call.name, call.arguments, ctx))
     );
+    if (opts.signal.aborted) {
+      throw new Error("Cancelled");
+    }
     for (let i = 0; i < calls.length; i++) {
       const call = calls[i]!;
       const outcome = outcomes[i]!;
@@ -120,6 +123,7 @@ async function executeCalls(opts: AgentRunOptions, calls: ToolCall[]): Promise<v
       content: outcome.content,
     });
   }
+  if (opts.signal.aborted) throw new Error("Cancelled");
 }
 
 export async function runAgent(opts: AgentRunOptions): Promise<string> {

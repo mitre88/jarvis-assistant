@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import { optionalNumber, optionalString, requireString } from "./args";
 import { classifyCommand } from "./command-safety";
 import type { ToolContext } from "./context";
@@ -9,6 +9,19 @@ import { resolveSafe } from "./sandbox";
 const DEFAULT_TIMEOUT_S = 30;
 const MAX_TIMEOUT_S = 120;
 const OUTPUT_CAP_BYTES = 64 * 1024;
+
+function killProcessTree(child: ChildProcess): void {
+  if (!child.pid) return;
+  if (process.platform === "win32") {
+    spawn("taskkill", ["/PID", String(child.pid), "/T", "/F"], { windowsHide: true });
+    return;
+  }
+  try {
+    process.kill(-child.pid, "SIGKILL");
+  } catch {
+    child.kill("SIGKILL");
+  }
+}
 
 function runShell(
   command: string,
@@ -21,7 +34,12 @@ function runShell(
       resolve({ code: null, output: "", truncated: false, timedOut: false, cancelled: true });
       return;
     }
-    const child = spawn(command, { shell: true, cwd, windowsHide: true });
+    const child = spawn(command, {
+      shell: true,
+      cwd,
+      windowsHide: true,
+      detached: process.platform !== "win32",
+    });
     let output = "";
     let truncated = false;
     let timedOut = false;
@@ -37,11 +55,11 @@ function runShell(
     child.stderr.on("data", capture);
     const timer = setTimeout(() => {
       timedOut = true;
-      child.kill("SIGKILL");
+      killProcessTree(child);
     }, timeoutMs);
     const onAbort = () => {
       cancelled = true;
-      child.kill("SIGKILL");
+      killProcessTree(child);
     };
     signal?.addEventListener("abort", onAbort, { once: true });
     child.on("error", (err) => {

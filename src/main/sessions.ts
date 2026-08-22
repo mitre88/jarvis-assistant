@@ -78,6 +78,7 @@ export class SessionStore {
   }
 
   load(id: string): SessionRecord | null {
+    if (!ID_RE.test(id)) throw new Error("Invalid session id");
     try {
       const raw = JSON.parse(fs.readFileSync(this.file(id), "utf8")) as SessionRecord;
       if (!raw.id || !Array.isArray(raw.messages)) return null;
