@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { AgentEvent, JarvisApi } from "../shared/types";
+import type { AgentEvent, JarvisApi, ModelProgress, VoiceEvent } from "../shared/types";
 
 const api: JarvisApi = {
   getSettings: () => ipcRenderer.invoke("settings:get"),
@@ -13,6 +13,27 @@ const api: JarvisApi = {
   onAgentEvent: (cb) => {
     ipcRenderer.on("agent-event", (_e, event: AgentEvent) => cb(event));
   },
+
+  startVoice: (mode) => ipcRenderer.send("voice:start", mode),
+  stopVoice: () => ipcRenderer.send("voice:stop"),
+  commitVoice: () => ipcRenderer.send("voice:commit"),
+  cancelVoice: () => ipcRenderer.send("voice:cancel"),
+  // Transfer the underlying buffer; the worklet hands us throwaway chunks.
+  sendPcm: (chunk) => ipcRenderer.send("voice:pcm", chunk.buffer),
+  onVoiceEvent: (cb) => {
+    ipcRenderer.on("voice-event", (_e, event: VoiceEvent) => cb(event));
+  },
+
+  listWhisperModels: () => ipcRenderer.invoke("voice:models:list"),
+  downloadWhisperModel: (id) => ipcRenderer.invoke("voice:models:download", id),
+  deleteWhisperModel: (id) => ipcRenderer.invoke("voice:models:delete", id),
+  browseWhisperModel: () => ipcRenderer.invoke("voice:models:browse"),
+  onModelProgress: (cb) => {
+    ipcRenderer.on("voice-model-progress", (_e, progress: ModelProgress) => cb(progress));
+  },
+
+  createRealtimeSession: () => ipcRenderer.invoke("realtime:session"),
+  executeTool: (name, argsJson) => ipcRenderer.invoke("tools:execute", name, argsJson),
 };
 
 contextBridge.exposeInMainWorld("jarvis", api);

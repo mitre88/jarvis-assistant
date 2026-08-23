@@ -6,6 +6,6 @@ import { fileURLToPath } from "node:url";
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const outDir = join(root, "dist", "renderer");
 mkdirSync(outDir, { recursive: true });
-for (const file of ["index.html", "styles.css"]) {
+for (const file of ["index.html", "styles.css", "voice-worklet.js"]) {
   copyFileSync(join(root, "src", "renderer", file), join(outDir, file));
 }

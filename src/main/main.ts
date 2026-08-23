@@ -1,9 +1,10 @@
-import { app, BrowserWindow, Tray } from "electron";
+import { app, BrowserWindow, globalShortcut, session, Tray } from "electron";
 import * as path from "node:path";
 import { AgentHost } from "./ipc";
 import { PrefsStore } from "./prefs";
 import { SecretStore } from "./secrets";
 import { createTray } from "./tray";
+import { VoiceHost } from "./voice/host";
 
 // dist/src/main → project root (dev) or app root (packaged)
 const ROOT = path.join(__dirname, "..", "..", "..");
@@ -51,17 +52,43 @@ if (!gotLock) {
   });
 
   app.whenReady().then(() => {
+    session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => {
+      callback(permission === "media");
+    });
+    session.defaultSession.setPermissionCheckHandler((_wc, permission) => {
+      return permission === "media";
+    });
+
     window = createWindow();
     tray = createTray(window, ASSETS);
     void tray;
 
     const userData = app.getPath("userData");
-    const host = new AgentHost(window, new PrefsStore(userData), new SecretStore(userData), userData);
+    const prefs = new PrefsStore(userData);
+    const secrets = new SecretStore(userData);
+    const host = new AgentHost(window, prefs, secrets, userData);
     host.register();
+
+    const voice = new VoiceHost(window, prefs, userData);
+    voice.register();
+
+    // Global push-to-listen: works even while the window is hidden in the tray.
+    const registered = globalShortcut.register("CommandOrControl+Shift+Space", () => {
+      window?.show();
+      window?.focus();
+      voice.emit({ type: "voice-toggle-hotkey" });
+    });
+    if (!registered) {
+      console.warn("Voice hotkey (Ctrl/Cmd+Shift+Space) is taken by another app.");
+    }
   });
 
   app.on("before-quit", () => {
     quitting = true;
+  });
+
+  app.on("will-quit", () => {
+    globalShortcut.unregisterAll();
   });
 
   app.on("activate", () => {

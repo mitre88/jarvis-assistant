@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta
     http-equiv="Content-Security-Policy"
-    content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'"
+    content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; connect-src https://api.openai.com https://*.openai.com; media-src 'self' blob: mediastream:"
   />
   <title>Jarvis</title>
   <link rel="stylesheet" href="./styles.css" />
@@ -27,6 +27,15 @@
   </main>
 
   <footer class="composer">
+    <button
+      id="mic"
+      class="mic-btn"
+      data-state="off"
+      title="Voice — click to listen, hold for push-to-talk (Ctrl/Cmd+Shift+Space)"
+      aria-label="Toggle voice input"
+    >
+      <canvas id="orb" width="96" height="96" aria-hidden="true"></canvas>
+    </button>
     <textarea
       id="input"
       class="composer-input"
@@ -75,6 +84,62 @@
         <input id="s-tts" type="checkbox" />
         Speak replies aloud (text-to-speech)
       </label>
+
+      <h3 class="settings-subhead">Voice input</h3>
+
+      <label>Voice engine
+        <select id="s-voice-engine">
+          <option value="whisper">Local Whisper — offline, private</option>
+          <option value="realtime">OpenAI Realtime — voice-to-voice</option>
+        </select>
+      </label>
+
+      <div id="s-whisper-fields">
+        <label>Whisper model
+          <select id="s-whisper-model"></select>
+        </label>
+        <span id="s-model-status" class="field-hint"></span>
+        <div class="settings-actions-inline">
+          <button id="s-model-download" class="ghost-btn" hidden>Download</button>
+          <button id="s-model-delete" class="ghost-btn" hidden>Delete</button>
+          <button id="s-model-browse" class="ghost-btn" hidden>Choose file…</button>
+        </div>
+
+        <label>Spoken language
+          <select id="s-stt-lang">
+            <option value="en">English</option>
+            <option value="auto">Auto-detect (multilingual models)</option>
+            <option value="es">Spanish</option>
+            <option value="fr">French</option>
+            <option value="de">German</option>
+            <option value="it">Italian</option>
+            <option value="pt">Portuguese</option>
+            <option value="zh">Chinese</option>
+            <option value="ja">Japanese</option>
+            <option value="ko">Korean</option>
+          </select>
+        </label>
+      </div>
+
+      <div id="s-realtime-fields" hidden>
+        <label>Realtime voice
+          <select id="s-realtime-voice">
+            <option value="marin">Marin</option>
+            <option value="cedar">Cedar</option>
+            <option value="alloy">Alloy</option>
+            <option value="ash">Ash</option>
+            <option value="ballad">Ballad</option>
+            <option value="coral">Coral</option>
+            <option value="echo">Echo</option>
+            <option value="sage">Sage</option>
+            <option value="shimmer">Shimmer</option>
+            <option value="verse">Verse</option>
+          </select>
+        </label>
+        <span class="field-hint">
+          Needs an OpenAI API key with the provider set to OpenAI-compatible at api.openai.com.
+        </span>
+      </div>
 
       <div class="settings-actions">
         <button id="s-test" class="ghost-btn">Test connection</button>

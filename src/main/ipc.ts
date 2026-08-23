@@ -12,11 +12,13 @@ import { randomUUID } from "node:crypto";
 import { runAgent } from "../agent/loop";
 import { SYSTEM_PROMPT } from "../agent/prompt";
 import { createProvider, testConnection, type ProviderHttpConfig } from "../agent/providers";
+import { buildRealtimeSessionPayload, REALTIME_MODEL } from "../agent/realtime";
 import { createStandardRegistry } from "../agent/tools";
 import type { ToolContext } from "../agent/tools/context";
 import type { Msg } from "../agent/types";
 import type {
   AgentEvent,
+  RealtimeSessionGrant,
   SettingsUpdate,
   SettingsView,
 } from "../shared/types";
@@ -131,6 +133,52 @@ export class AgentHost {
     });
 
     ipcMain.on("window:hide", () => this.window.hide());
+
+    // Realtime tool bridge: the renderer's Realtime session executes tools
+    // through the same registry, context, and approval flow as the agent loop.
+    ipcMain.handle("tools:execute", (_e, name: string, argsJson: string) =>
+      this.registry.execute(name, argsJson, this.toolContext())
+    );
+
+    ipcMain.handle("realtime:session", () => this.createRealtimeSession());
+  }
+
+  private async createRealtimeSession(): Promise<RealtimeSessionGrant> {
+    const settings = this.prefs.get();
+    const apiKey = this.secrets.getApiKey();
+    if (!apiKey) {
+      throw new Error("Realtime voice needs an OpenAI API key. Open Settings.");
+    }
+    if (!settings.baseUrl.includes("api.openai.com")) {
+      throw new Error("Realtime voice is only available with api.openai.com as the base URL.");
+    }
+    const baseUrl = "https://api.openai.com";
+    const payload = buildRealtimeSessionPayload({
+      voice: settings.realtimeVoice,
+      instructions: SYSTEM_PROMPT,
+      tools: this.registry.specs(),
+    });
+    const response = await fetch(`${baseUrl}/v1/realtime/client_secrets`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      throw new Error(
+        `Could not create a Realtime session: HTTP ${response.status}${
+          detail ? ` — ${detail.slice(0, 200)}` : ""
+        }`
+      );
+    }
+    const data = (await response.json()) as { value?: string };
+    if (!data.value) {
+      throw new Error("Realtime session response had no client secret.");
+    }
+    return { clientSecret: data.value, model: REALTIME_MODEL, baseUrl };
   }
 
   private async run(text: string): Promise<void> {

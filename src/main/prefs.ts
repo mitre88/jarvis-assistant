@@ -10,7 +10,12 @@ export const DEFAULT_SETTINGS: Settings = {
   model: "",
   organization: "",
   extraHeaders: {},
-  tts: false,
+  tts: true,
+  voiceEngine: "whisper",
+  whisperModel: "base.en",
+  whisperModelPath: "",
+  sttLanguage: "en",
+  realtimeVoice: "marin",
 };
 
 export class PrefsStore {

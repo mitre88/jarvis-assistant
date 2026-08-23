@@ -30,12 +30,22 @@
       "assets/**",
       "!dist/tests/**"
     ],
+    "asarUnpack": [
+      "**/node_modules/whisper-cpp-node/**",
+      "**/node_modules/@whisper-cpp-node/**"
+    ],
     "directories": {
       "buildResources": "build",
       "output": "release"
     },
     "mac": {
       "category": "public.app-category.productivity",
+      "hardenedRuntime": true,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Jarvis uses the microphone for voice commands. Local Whisper stays on this machine; Realtime mode sends audio to the OpenAI session you configured."
+      },
       "target": [
         "dmg",
         "zip"
@@ -51,5 +61,8 @@
         "AppImage"
       ]
     }
+  },
+  "dependencies": {
+    "whisper-cpp-node": "^0.2.12"
   }
 }

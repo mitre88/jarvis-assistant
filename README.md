@@ -1,11 +1,12 @@
 # Jarvis
 
-A local desktop AI assistant for Windows and macOS. Dark HUD, dry wit, real tools.
+A local desktop AI assistant for Windows and macOS. Dark HUD, dry wit, real tools, voice.
 
 Jarvis is **bring-your-own-model**: you point it at OpenAI, Anthropic, any
 OpenAI-compatible endpoint (Groq, Together, custom gateways), or a local model
 served by Ollama or LM Studio. The app ships no API keys and phones home to
-no one — the only network traffic is to the provider you configure.
+no one — the only network traffic is to the provider you configure (and,
+optionally, Hugging Face when you download a Whisper model).
 
 Beyond chat, Jarvis runs a tool-calling agent loop in the Electron main
 process. The model can inspect the system, read and write files in your home
@@ -33,6 +34,9 @@ npm run dist      # installer for the current platform (NSIS on Win, DMG on Mac)
 npm run dist:all  # both platforms (cross-building a mac DMG requires macOS)
 ```
 
+macOS packages request microphone access and include entitlements for the
+native Whisper addon. Grant the prompt the first time you click the orb.
+
 ## Connect your model
 
 Open **Settings** (top right; it opens automatically on first run) and pick a
@@ -55,6 +59,29 @@ small local models vary in how well they use tools.
 For local providers: start Ollama (`ollama serve`, then `ollama pull llama3.2`)
 or LM Studio's local server first.
 
+## Voice
+
+The reactor orb in the composer is the voice control.
+
+**Local Whisper (default)** — offline, private. Click the orb to start
+auto-listen (VAD-driven turn taking). Hold the orb for push-to-talk. Jarvis
+transcribes on this machine with `whisper.cpp`, then runs the same agent loop
+as typed chat. Replies are spoken via the system TTS when that setting is on.
+
+Download a ggml model from Settings (catalog hosted by
+[whisper.cpp on Hugging Face](https://huggingface.co/ggerganov/whisper.cpp)),
+or point it at a `.bin` you already have. `base.en` is the recommended first
+download.
+
+**OpenAI Realtime (optional)** — voice-to-voice, lowest latency. Shown when
+the provider is OpenAI-compatible, the base URL is `api.openai.com`, and an
+API key is stored. The real key never leaves the main process: it mints an
+ephemeral client secret, and the renderer opens a WebRTC session to
+`gpt-realtime`. Tool calls from that session go through the same registry and
+approval dialogs as the local loop.
+
+Switch engines in Settings → Voice input.
+
 ## Where things live
 
 - **API keys** — encrypted with the OS keychain via Electron `safeStorage`
@@ -62,8 +89,9 @@ or LM Studio's local server first.
   directory. Never in the repo, never in tracked files. If the OS provides no
   encryption backend (some bare Linux setups), the key is stored base64-encoded
   without encryption — treat that machine accordingly.
-- **Preferences** (provider, base URL, model, TTS) — plain JSON in the
-  user-data directory.
+- **Preferences** (provider, base URL, model, TTS, voice engine) — plain JSON
+  in the user-data directory.
+- **Whisper models** — ggml files under `whisper-models/` in the same place.
 - **Memory** (`remember`/`recall` notes) — a small JSON file in the same place.
 
 ## Security model
@@ -80,36 +108,33 @@ or LM Studio's local server first.
 - **Iteration cap**: the agent loop stops after a fixed number of tool rounds.
 - **Renderer isolation**: context isolation and a sandboxed renderer; the UI
   talks to the system only through a narrow preload bridge. API keys never
-  reach the renderer.
+  reach the renderer. Realtime sessions use a short-lived client secret.
 
 ## Keyboard
 
 - `Ctrl+Enter` / `Cmd+Enter` — send
-- `Esc` — deny an open confirmation, close settings, or hide to tray
+- `Ctrl+Shift+Space` / `Cmd+Shift+Space` — toggle voice (works from the tray)
+- `Esc` — deny an open confirmation, stop speech / cancel an in-flight run,
+  close settings, or hide to tray
 
-The tray icon toggles the window; quitting is in the tray menu. Optional
-text-to-speech for replies can be enabled in Settings.
-
-Voice *input* is deliberately not included: Chromium's speech recognition
-needs Google API keys inside Electron, and shipping a broken mic helps no one.
+The tray icon toggles the window; quitting is in the tray menu.
 
 ## Architecture
 
 ```
 src/
-  main/       Electron main: window, tray, IPC host, prefs, keychain secrets
+  main/       Electron main: window, tray, IPC host, prefs, keychain, voice
   preload/    contextBridge — the only door between UI and system
-  renderer/   vanilla TS HUD: chat feed, settings panel, confirm dialogs, TTS
-  agent/      provider clients (OpenAI-compatible, Anthropic, Ollama),
-              the tool-calling loop, and the tool registry
-  shared/     types + provider defaults shared across processes
-tests/        node:test suites: sandbox, command heuristic, providers, loop, tools
+  renderer/   vanilla TS HUD: orb, chat, settings, toasts, TTS, Realtime
+  agent/      provider clients, tool-calling loop, Realtime session payload
+  shared/     types + provider defaults + Realtime event helpers
+tests/        node:test — sandbox, providers, loop, tools, VAD, models, Realtime
 ```
 
-Zero runtime dependencies — providers are called with `fetch`, streaming is
-parsed by hand (SSE / NDJSON), storage is JSON plus `safeStorage`. Tools never
-import Electron; they receive injected capabilities, which is what makes them
-testable.
+Providers are called with `fetch`. Streaming is parsed by hand (SSE / NDJSON).
+Storage is JSON plus `safeStorage`. Tools never import Electron; they receive
+injected capabilities, which is what makes them testable. Local STT uses
+`whisper-cpp-node` (Metal on Apple Silicon, Vulkan on Windows).
 
 ## License
 
