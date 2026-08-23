@@ -16,13 +16,27 @@ let quitting = false;
 
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
-    width: 980,
-    height: 720,
-    minWidth: 640,
-    minHeight: 480,
+    width: 1100,
+    height: 740,
+    minWidth: 720,
+    minHeight: 520,
     backgroundColor: "#0a0f16",
     autoHideMenuBar: true,
     icon: path.join(ROOT, "build", "icon.png"),
+    ...(process.platform === "linux"
+      ? {}
+      : {
+          titleBarStyle: "hidden" as const,
+          ...(process.platform === "darwin"
+            ? { trafficLightPosition: { x: 14, y: 13 } }
+            : {
+                titleBarOverlay: {
+                  color: "#0a0f16",
+                  symbolColor: "#cfe3ec",
+                  height: 40,
+                },
+              }),
+        }),
     webPreferences: {
       preload: path.join(__dirname, "..", "preload", "preload.js"),
       contextIsolation: true,
@@ -72,14 +86,30 @@ if (!gotLock) {
     const voice = new VoiceHost(window, prefs, userData);
     voice.register();
 
-    // Global push-to-listen: works even while the window is hidden in the tray.
-    const registered = globalShortcut.register("CommandOrControl+Shift+Space", () => {
-      window?.show();
-      window?.focus();
-      voice.emit({ type: "voice-toggle-hotkey" });
-    });
-    if (!registered) {
-      console.warn("Voice hotkey (Ctrl/Cmd+Shift+Space) is taken by another app.");
+    const voiceAccel = "CommandOrControl+Shift+Space";
+    if (
+      !globalShortcut.register(voiceAccel, () => {
+        window?.show();
+        window?.focus();
+        voice.emit({ type: "voice-toggle-hotkey" });
+      })
+    ) {
+      console.warn(`Jarvis: could not register voice shortcut ${voiceAccel}`);
+    }
+
+    const summonAccel = process.platform === "darwin" ? "Command+Shift+J" : "Control+Shift+J";
+    if (
+      !globalShortcut.register(summonAccel, () => {
+        if (!window) return;
+        if (window.isVisible() && window.isFocused()) {
+          window.hide();
+        } else {
+          window.show();
+          window.focus();
+        }
+      })
+    ) {
+      console.warn(`Jarvis: could not register global shortcut ${summonAccel}`);
     }
   });
 

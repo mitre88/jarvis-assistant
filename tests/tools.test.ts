@@ -4,12 +4,21 @@ import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { after, describe, it } from "node:test";
 import { clipboardReadTool, clipboardWriteTool } from "../src/agent/tools/clipboard";
-import { listDirTool, readFileTool, writeFileTool } from "../src/agent/tools/fs";
-import { recallTool, rememberTool } from "../src/agent/tools/memory";
+import {
+  appendFileTool,
+  deleteFileTool,
+  listDirTool,
+  moveFileTool,
+  readFileTool,
+  writeFileTool,
+} from "../src/agent/tools/fs";
+import { grepFilesTool } from "../src/agent/tools/grep";
+import { recallTool, rememberTool, searchMemoryTool } from "../src/agent/tools/memory";
 import { notifyTool } from "../src/agent/tools/notify";
-import { openUrlTool } from "../src/agent/tools/open";
+import { openPathTool, openUrlTool } from "../src/agent/tools/open";
 import { createStandardRegistry } from "../src/agent/tools";
 import { runCommandTool } from "../src/agent/tools/shell";
+import { fetchUrlTool, webSearchTool } from "../src/agent/tools/web";
 import { fakeContext } from "./helpers";
 
 function tempHome(): string {
@@ -31,6 +40,16 @@ describe("filesystem tools", () => {
   it("read_file returns content", async () => {
     const out = await readFileTool.execute({ path: "a.txt" }, fakeContext({ home }));
     assert.equal(out, "hello");
+  });
+
+  it("read_file pages with offset and limit", async () => {
+    writeFileSync(path.join(home, "paged.txt"), "ABCDEFGHIJ");
+    const slice = await readFileTool.execute(
+      { path: "paged.txt", offset: 2, limit: 4 },
+      fakeContext({ home })
+    );
+    assert.match(slice, /^CDEF/);
+    assert.match(slice, /offset=6/);
   });
 
   it("read_file refuses paths outside the sandbox", async () => {
@@ -63,6 +82,54 @@ describe("filesystem tools", () => {
     const ctx = fakeContext({ home, approve: true });
     await writeFileTool.execute({ path: "a.txt", content: "new" }, ctx);
     assert.match(ctx.confirmRequests[0]!.title, /Overwrite/);
+  });
+
+  it("append_file appends after approval", async () => {
+    const ctx = fakeContext({ home, approve: true });
+    writeFileSync(path.join(home, "log.txt"), "hi");
+    const out = await appendFileTool.execute({ path: "log.txt", content: " there" }, ctx);
+    assert.match(out, /Appended/);
+    assert.equal(readFileSync(path.join(home, "log.txt"), "utf8"), "hi there");
+  });
+
+  it("delete_file refuses directories and respects denial", async () => {
+    mkdirSync(path.join(home, "keep-dir"));
+    await assert.rejects(
+      () => deleteFileTool.execute({ path: "keep-dir" }, fakeContext({ home, approve: true })),
+      /directory/
+    );
+    writeFileSync(path.join(home, "doomed.txt"), "x");
+    const denied = await deleteFileTool.execute(
+      { path: "doomed.txt" },
+      fakeContext({ home, approve: false })
+    );
+    assert.match(denied, /declined/);
+    assert.ok(existsSync(path.join(home, "doomed.txt")));
+    const ok = await deleteFileTool.execute(
+      { path: "doomed.txt" },
+      fakeContext({ home, approve: true })
+    );
+    assert.match(ok, /Deleted/);
+    assert.ok(!existsSync(path.join(home, "doomed.txt")));
+  });
+
+  it("move_file relocates after approval", async () => {
+    writeFileSync(path.join(home, "src.txt"), "cargo");
+    const ctx = fakeContext({ home, approve: true });
+    const out = await moveFileTool.execute({ from: "src.txt", to: "dest/out.txt" }, ctx);
+    assert.match(out, /Moved/);
+    assert.ok(!existsSync(path.join(home, "src.txt")));
+    assert.equal(readFileSync(path.join(home, "dest", "out.txt"), "utf8"), "cargo");
+  });
+
+  it("grep_files finds a line under the workspace", async () => {
+    writeFileSync(path.join(home, "needle.txt"), "alpha\nfind-me-please\nomega\n");
+    const out = await grepFilesTool.execute(
+      { query: "find-me", path: "~" },
+      fakeContext({ home })
+    );
+    assert.match(out, /needle\.txt/);
+    assert.match(out, /find-me-please/);
   });
 });
 
@@ -109,16 +176,36 @@ describe("run_command tool", () => {
     );
     assert.match(out, /killed after 0.3s timeout/);
   });
+
+  it("kills an in-flight command when the abort signal fires", async () => {
+    const ac = new AbortController();
+    const ctx = fakeContext({ home, approve: true, signal: ac.signal });
+    const pending = runCommandTool.execute(
+      { command: 'node -e "setTimeout(()=>{},5000)"', timeout_seconds: 8 },
+      ctx
+    );
+    setTimeout(() => ac.abort(), 80);
+    const out = await pending;
+    assert.match(out, /Cancelled by the user/);
+  });
 });
 
 describe("clipboard, memory, notify, open_url", () => {
   const home = tempHome();
   after(() => rmSync(home, { recursive: true, force: true }));
 
-  it("clipboard round-trips text", async () => {
-    const ctx = fakeContext({ home });
+  it("clipboard round-trips text after approval", async () => {
+    const ctx = fakeContext({ home, approve: true });
     await clipboardWriteTool.execute({ text: "copied" }, ctx);
+    assert.equal(ctx.confirmRequests.length, 1);
     assert.equal(await clipboardReadTool.execute({}, ctx), "copied");
+  });
+
+  it("clipboard_write does nothing when declined", async () => {
+    const ctx = fakeContext({ home, approve: false, clipboardText: "keep" });
+    const out = await clipboardWriteTool.execute({ text: "overwrite" }, ctx);
+    assert.match(out, /declined/);
+    assert.equal(ctx.clipboardText, "keep");
   });
 
   it("remember persists and recall filters", async () => {
@@ -131,6 +218,8 @@ describe("clipboard, memory, notify, open_url", () => {
     const filtered = await recallTool.execute({ query: "tea" }, ctx);
     assert.match(filtered, /tea/);
     assert.doesNotMatch(filtered, /Backup/);
+    const ranked = await searchMemoryTool.execute({ query: "tea" }, ctx);
+    assert.match(ranked, /tea/);
   });
 
   it("notify goes through the injected notifier", async () => {
@@ -148,6 +237,48 @@ describe("clipboard, memory, notify, open_url", () => {
       /Only http\(s\)/
     );
   });
+
+  it("open_path asks before opening an executable", async () => {
+    const exe = path.join(home, "payload.sh");
+    writeFileSync(exe, "#!/bin/sh\necho hi\n");
+    const denied = fakeContext({ home, approve: false });
+    const out = await openPathTool.execute({ path: "payload.sh" }, denied);
+    assert.match(out, /declined/);
+    assert.equal(denied.openedPaths.length, 0);
+  });
+
+  it("fetch_url blocks private targets and reads public text via injected fetch", async () => {
+    await assert.rejects(
+      () => fetchUrlTool.execute({ url: "http://127.0.0.1/secret" }, fakeContext({ home })),
+      /Blocked host/
+    );
+    const ctx = fakeContext({
+      home,
+      fetch: async () =>
+        new Response("<html><body><p>Hello from the web</p></body></html>", {
+          status: 200,
+          headers: { "content-type": "text/html" },
+        }),
+    });
+    const out = await fetchUrlTool.execute({ url: "https://example.com/page" }, ctx);
+    assert.match(out, /Hello from the web/);
+    assert.match(out, /example.com/);
+  });
+
+  it("web_search parses injected DuckDuckGo HTML", async () => {
+    const html = `
+      <a class="result__a" href="https://example.org/a">Alpha</a>
+      <a class="result__snippet">First hit</a>
+    `;
+    const ctx = fakeContext({
+      home,
+      fetch: async () =>
+        new Response(html, { status: 200, headers: { "content-type": "text/html" } }),
+    });
+    const out = await webSearchTool.execute({ query: "jarvis" }, ctx);
+    assert.match(out, /Alpha/);
+    assert.match(out, /example.org/);
+  });
 });
 
 describe("tool registry", () => {
@@ -157,10 +288,15 @@ describe("tool registry", () => {
   it("exposes all required tools", () => {
     const names = createStandardRegistry().specs().map((t) => t.name).sort();
     assert.deepEqual(names, [
+      "append_file",
       "clipboard_read",
       "clipboard_write",
       "datetime",
+      "delete_file",
+      "fetch_url",
+      "grep_files",
       "list_dir",
+      "move_file",
       "notify",
       "open_path",
       "open_url",
@@ -168,7 +304,9 @@ describe("tool registry", () => {
       "recall",
       "remember",
       "run_command",
+      "search_memory",
       "system_info",
+      "web_search",
       "write_file",
     ]);
   });

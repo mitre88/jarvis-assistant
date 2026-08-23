@@ -5,6 +5,8 @@ export interface FakeContextOptions {
   home: string;
   approve?: boolean;
   clipboardText?: string;
+  signal?: AbortSignal;
+  fetch?: typeof globalThis.fetch;
 }
 
 export interface FakeContext extends ToolContext {
@@ -20,6 +22,8 @@ export function fakeContext(opts: FakeContextOptions): FakeContext {
     roots: [opts.home],
     home: opts.home,
     memoryFile: path.join(opts.home, "memory.json"),
+    signal: opts.signal,
+    fetch: opts.fetch,
     confirmRequests: [],
     notifications: [],
     openedUrls: [],

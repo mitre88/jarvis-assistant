@@ -19,7 +19,7 @@ export function createTray(window: BrowserWindow, assetsDir: string): Tray {
 
   tray.setContextMenu(
     Menu.buildFromTemplate([
-      { label: "Show / Hide", click: toggle },
+      { label: "Show / Hide", accelerator: "CommandOrControl+Shift+J", click: toggle },
       { type: "separator" },
       { label: "Quit Jarvis", click: () => app.quit() },
     ])

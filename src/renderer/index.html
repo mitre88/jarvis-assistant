@@ -10,41 +10,61 @@
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
-  <header class="hud-header">
-    <div class="brand">
-      <span class="brand-ring" aria-hidden="true"></span>
-      <span class="brand-name">JARVIS</span>
+  <div class="app">
+    <aside id="session-sidebar" class="session-sidebar" aria-label="Sessions">
+      <div class="session-head">
+        <span class="session-head-title">Sessions</span>
+        <button id="toggle-sessions" class="ghost-btn icon-btn" title="Hide sessions" type="button">⟨</button>
+      </div>
+      <ul id="session-list" class="session-list"></ul>
+    </aside>
+
+    <div class="hud-column">
+      <header class="hud-header">
+        <div class="brand">
+          <span class="brand-ring" aria-hidden="true"></span>
+          <span class="brand-name">JARVIS</span>
+        </div>
+        <div class="header-actions">
+          <span id="status-chip" class="status-chip" data-state="offline">offline</span>
+          <button id="show-sessions" class="ghost-btn" title="Show sessions" type="button" hidden>Sessions</button>
+          <button id="new-session" class="ghost-btn" title="Start a new conversation" type="button">New session</button>
+          <button id="open-settings" class="ghost-btn" title="Settings" type="button">Settings</button>
+        </div>
+      </header>
+
+      <main id="feed" class="feed" aria-live="polite" role="log">
+        <div id="empty-state" class="empty-state">
+          <span class="empty-ring" aria-hidden="true"></span>
+          <p id="empty-title" class="empty-title">Standing by.</p>
+          <p class="empty-hint">Ctrl+Enter to send · Ctrl+Shift+J to summon · Esc to hide</p>
+          <button id="empty-settings" class="ghost-btn" type="button" hidden>Open Settings</button>
+        </div>
+      </main>
+
+      <footer class="composer">
+        <button
+          id="mic"
+          class="mic-btn"
+          data-state="off"
+          title="Voice — click to listen, hold for push-to-talk (Ctrl/Cmd+Shift+Space)"
+          aria-label="Toggle voice input"
+          type="button"
+        >
+          <canvas id="orb" width="96" height="96" aria-hidden="true"></canvas>
+        </button>
+        <textarea
+          id="input"
+          class="composer-input"
+          rows="2"
+          placeholder="Ask Jarvis — Ctrl+Enter (⌘+Enter) to send, Esc to hide"
+        ></textarea>
+        <button id="send" class="send-btn" type="button">Send</button>
+      </footer>
     </div>
-    <div class="header-actions">
-      <span id="status-chip" class="status-chip">offline</span>
-      <button id="new-session" class="ghost-btn" title="Start a new conversation">New session</button>
-      <button id="open-settings" class="ghost-btn" title="Settings">Settings</button>
-    </div>
-  </header>
+  </div>
 
-  <main id="feed" class="feed" aria-live="polite">
-    <div id="empty-state" class="empty-state">Standing by.</div>
-  </main>
-
-  <footer class="composer">
-    <button
-      id="mic"
-      class="mic-btn"
-      data-state="off"
-      title="Voice — click to listen, hold for push-to-talk (Ctrl/Cmd+Shift+Space)"
-      aria-label="Toggle voice input"
-    >
-      <canvas id="orb" width="96" height="96" aria-hidden="true"></canvas>
-    </button>
-    <textarea
-      id="input"
-      class="composer-input"
-      rows="2"
-      placeholder="Ask Jarvis — Ctrl+Enter (⌘+Enter) to send, Esc to hide"
-    ></textarea>
-    <button id="send" class="send-btn">Send</button>
-  </footer>
-
+  <div id="settings-backdrop" class="settings-backdrop" hidden></div>
   <aside id="settings-panel" class="settings-panel" hidden>
     <div class="settings-inner">
       <h2>Settings</h2>
@@ -69,7 +89,8 @@
       </label>
 
       <label>Model
-        <input id="s-model" type="text" spellcheck="false" placeholder="e.g. gpt-4o-mini, claude-sonnet-4-5, llama3.2" />
+        <input id="s-model" type="text" list="s-models" spellcheck="false" placeholder="e.g. gpt-4o-mini, claude-sonnet-4-5, llama3.2" />
+        <datalist id="s-models"></datalist>
       </label>
 
       <label>Organization <span class="field-optional">optional, OpenAI only</span>
@@ -78,6 +99,14 @@
 
       <label>Extra headers <span class="field-optional">optional, one "Name: value" per line</span>
         <textarea id="s-headers" rows="2" spellcheck="false"></textarea>
+      </label>
+
+      <label>Tool rounds <span class="field-optional">1–32, default 8</span>
+        <input id="s-iterations" type="number" min="1" max="32" />
+      </label>
+
+      <label>Extra workspace roots <span class="field-optional">one path per line, besides home</span>
+        <textarea id="s-roots" rows="2" spellcheck="false" placeholder="/path/to/project"></textarea>
       </label>
 
       <label class="check-row">
@@ -142,24 +171,27 @@
       </div>
 
       <div class="settings-actions">
-        <button id="s-test" class="ghost-btn">Test connection</button>
-        <button id="s-save" class="send-btn">Save</button>
-        <button id="s-close" class="ghost-btn">Close</button>
+        <button id="s-test" class="ghost-btn" type="button">Test connection</button>
+        <button id="s-save" class="send-btn" type="button">Save</button>
+        <button id="s-close" class="ghost-btn" type="button">Close</button>
       </div>
       <p id="s-test-result" class="test-result" hidden></p>
     </div>
   </aside>
 
   <div id="confirm-overlay" class="confirm-overlay" hidden>
-    <div class="confirm-box" role="alertdialog" aria-modal="true">
+    <div class="confirm-box" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-detail">
       <h3 id="confirm-title"></h3>
+      <p id="confirm-queue" class="confirm-queue" hidden></p>
       <pre id="confirm-detail"></pre>
       <div class="confirm-actions">
-        <button id="confirm-deny" class="ghost-btn">Deny</button>
-        <button id="confirm-approve" class="danger-btn">Approve</button>
+        <button id="confirm-deny" class="ghost-btn" type="button">Deny</button>
+        <button id="confirm-approve" class="danger-btn" type="button">Approve</button>
       </div>
     </div>
   </div>
+
+  <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
 
   <script type="module" src="./app.js"></script>
 </body>

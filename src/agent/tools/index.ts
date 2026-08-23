@@ -1,11 +1,20 @@
 import { clipboardReadTool, clipboardWriteTool } from "./clipboard";
-import { listDirTool, readFileTool, writeFileTool } from "./fs";
-import { rememberTool, recallTool } from "./memory";
+import {
+  appendFileTool,
+  deleteFileTool,
+  listDirTool,
+  moveFileTool,
+  readFileTool,
+  writeFileTool,
+} from "./fs";
+import { grepFilesTool } from "./grep";
+import { rememberTool, recallTool, searchMemoryTool } from "./memory";
 import { notifyTool } from "./notify";
 import { openPathTool, openUrlTool } from "./open";
 import { ToolRegistry } from "./registry";
 import { runCommandTool } from "./shell";
 import { datetimeTool, systemInfoTool } from "./system";
+import { fetchUrlTool, webSearchTool } from "./web";
 
 export function createStandardRegistry(): ToolRegistry {
   const registry = new ToolRegistry();
@@ -15,6 +24,10 @@ export function createStandardRegistry(): ToolRegistry {
     listDirTool,
     readFileTool,
     writeFileTool,
+    appendFileTool,
+    deleteFileTool,
+    moveFileTool,
+    grepFilesTool,
     runCommandTool,
     openUrlTool,
     openPathTool,
@@ -22,7 +35,10 @@ export function createStandardRegistry(): ToolRegistry {
     clipboardWriteTool,
     rememberTool,
     recallTool,
+    searchMemoryTool,
     notifyTool,
+    fetchUrlTool,
+    webSearchTool,
   ]) {
     registry.register(tool);
   }

@@ -1,30 +1,20 @@
-/** Transient toast notifications, top-right, self-dismissing. */
+/** Glass toasts — settings saved, connection test, voice notices. */
 
-const HIDE_AFTER_MS = 3800;
+const stack = document.getElementById("toast-stack") as HTMLElement;
 
-let container: HTMLElement | null = null;
-
-function ensureContainer(): HTMLElement {
-  if (!container) {
-    container = document.createElement("div");
-    container.className = "toast-container";
-    container.setAttribute("aria-live", "polite");
-    document.body.appendChild(container);
-  }
-  return container;
-}
-
-export function showToast(message: string, kind: "info" | "warn" = "info"): void {
-  const host = ensureContainer();
-  const toast = document.createElement("div");
-  toast.className = `toast ${kind}`;
-  toast.textContent = message;
-  host.appendChild(toast);
-  requestAnimationFrame(() => toast.classList.add("show"));
+export function showToast(
+  message: string,
+  kind: "info" | "ok" | "err" | "warn" = "info"
+): void {
+  const mapped = kind === "warn" ? "err" : kind;
+  const el = document.createElement("div");
+  el.className = `toast toast-${mapped}`;
+  el.textContent = message;
+  stack.append(el);
+  requestAnimationFrame(() => el.classList.add("visible"));
   window.setTimeout(() => {
-    toast.classList.remove("show");
-    toast.addEventListener("transitionend", () => toast.remove(), { once: true });
-    // Fallback removal in case transitions are disabled (reduced motion).
-    window.setTimeout(() => toast.remove(), 600);
-  }, HIDE_AFTER_MS);
+    el.classList.remove("visible");
+    el.addEventListener("transitionend", () => el.remove(), { once: true });
+    window.setTimeout(() => el.remove(), 500);
+  }, 4000);
 }

@@ -1,11 +1,12 @@
-/** Renderer entry point: wires agent events, voice engines, orb, composer. */
+/** Renderer entry point: wires agent events, sessions, voice engines, orb. */
 import {
   addErrorMessage,
   addToolCall,
   addUserMessage,
   appendToken,
-  clearFeed,
   finishStreaming,
+  hasVisibleMessages,
+  onEmptySettingsClick,
   setEmptyStateText,
   setToolResult,
 } from "./chat.js";
@@ -19,6 +20,7 @@ import {
   toggleRealtime,
   type RealtimeState,
 } from "./realtime.js";
+import { applySession, initSessions, renderSessionList } from "./sessions.js";
 import { closeSettings, initSettings, isSettingsOpen, openSettings } from "./settings.js";
 import { isSpeaking, setTtsEnabled, speak, stopSpeaking } from "./speech.js";
 import { showToast } from "./toast.js";
@@ -43,10 +45,24 @@ const micBtn = document.getElementById("mic") as HTMLButtonElement;
 const orbCanvas = document.getElementById("orb") as HTMLCanvasElement;
 
 let running = false;
+let configured = false;
+let canRetry = false;
 let voiceUi: VoiceUiState = "off";
 let rtState: RealtimeState = "off";
 let settings: SettingsView | null = null;
 const pendingToolRows: HTMLElement[] = [];
+
+type Activity = "offline" | "idle" | "thinking" | "streaming" | "error";
+
+function setActivity(state: Activity): void {
+  statusChip.dataset.state = state;
+  const model = statusChip.dataset.model ?? "";
+  if (!configured) {
+    statusChip.textContent = "not configured";
+    return;
+  }
+  statusChip.textContent = model ? `${state} · ${model}` : state;
+}
 
 function orbModeNow(): OrbMode {
   if (isConfirmOpen()) return "confirm";
@@ -79,6 +95,7 @@ function setRunning(on: boolean): void {
   running = on;
   sendBtn.textContent = on ? "Stop" : "Send";
   sendBtn.classList.toggle("danger-btn", on);
+  if (!on && configured) setActivity("idle");
   updateOrb();
 }
 
@@ -89,21 +106,24 @@ function realtimeAvailable(view: SettingsView): boolean {
 function applySettings(view: SettingsView): void {
   settings = view;
   setTtsEnabled(view.tts);
+  configured = Boolean(view.model);
   if (view.voiceEngine !== "realtime" && isRealtimeActive()) stopRealtime();
   if (view.model) {
-    statusChip.textContent = `${PROVIDER_DEFAULTS[view.provider].label} · ${view.model}`;
-    statusChip.classList.add("online");
-    setEmptyStateText("Standing by.");
+    statusChip.dataset.model = `${PROVIDER_DEFAULTS[view.provider].label} · ${view.model}`;
+    setEmptyStateText("Standing by.", false);
+    setActivity(running ? "thinking" : "idle");
   } else {
-    statusChip.textContent = "not configured";
-    statusChip.classList.remove("online");
-    setEmptyStateText("No provider configured.");
+    statusChip.dataset.model = "";
+    setEmptyStateText("No provider configured.", true);
+    setActivity("offline");
   }
 }
 
 function submitToAgent(text: string): void {
   addUserMessage(text);
+  canRetry = true;
   setRunning(true);
+  setActivity("thinking");
   window.jarvis.send(text);
 }
 
@@ -119,6 +139,26 @@ function send(): void {
   if (running) return;
   input.value = "";
   submitToAgent(text);
+}
+
+function retryLast(): void {
+  if (running || !canRetry) return;
+  setRunning(true);
+  setActivity("thinking");
+  window.jarvis.retry();
+}
+
+async function startNewSession(): Promise<void> {
+  if (hasVisibleMessages() && !window.confirm("Start a new session? The current chat is saved.")) {
+    return;
+  }
+  stopSpeaking();
+  if (isRealtimeActive()) stopRealtime();
+  stopListening();
+  const view = await window.jarvis.newSession();
+  pendingToolRows.length = 0;
+  await applySession(view);
+  setRunning(false);
 }
 
 /** Toggle whichever voice engine is configured. */
@@ -138,8 +178,6 @@ async function toggleVoice(): Promise<void> {
   updateOrb();
 }
 
-/* ---------- composer & buttons ---------- */
-
 sendBtn.addEventListener("click", () => {
   if (running) {
     window.jarvis.cancel();
@@ -149,18 +187,12 @@ sendBtn.addEventListener("click", () => {
 });
 
 newSessionBtn.addEventListener("click", () => {
-  stopSpeaking();
-  if (isRealtimeActive()) stopRealtime();
-  stopListening();
-  window.jarvis.resetChat();
-  pendingToolRows.length = 0;
-  clearFeed();
-  setRunning(false);
+  void startNewSession();
 });
 
 openSettingsBtn.addEventListener("click", () => openSettings());
+onEmptySettingsClick(() => openSettings());
 
-/* Mic button: click toggles listening; press-and-hold is push-to-talk. */
 let holdTimer: number | null = null;
 let holding = false;
 let suppressClick = false;
@@ -216,15 +248,15 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-/* ---------- agent events ---------- */
-
 window.jarvis.onAgentEvent((event) => {
   switch (event.type) {
     case "run-start":
       setRunning(true);
       setCapturePaused(true);
+      setActivity("thinking");
       break;
     case "token":
+      setActivity("streaming");
       appendToken(event.text);
       break;
     case "tool-call":
@@ -245,6 +277,7 @@ window.jarvis.onAgentEvent((event) => {
       break;
     case "done":
       finishStreaming();
+      canRetry = false;
       setRunning(false);
       speak(event.text, () => {
         setCapturePaused(false);
@@ -253,14 +286,16 @@ window.jarvis.onAgentEvent((event) => {
       updateOrb();
       break;
     case "error":
-      addErrorMessage(event.message);
+      addErrorMessage(event.message, canRetry ? retryLast : undefined);
+      setActivity("error");
       setRunning(false);
       setCapturePaused(false);
       break;
+    case "sessions-changed":
+      renderSessionList(event.sessions, event.currentId);
+      break;
   }
 });
-
-/* ---------- voice engines ---------- */
 
 initVoice({
   onState: (state) => {
@@ -270,7 +305,7 @@ initVoice({
   onLevel: (level) => setOrbLevel(level),
   onTranscript: (text) => {
     if (running) {
-      showToast("Still working on the previous request.");
+      showToast("Still working on the previous request.", "warn");
       return;
     }
     submitToAgent(text);
@@ -299,15 +334,18 @@ initRealtime({
   onNotice: (message) => showToast(message, "warn"),
 });
 
-/* ---------- boot ---------- */
-
 initOrb(orbCanvas);
 updateOrb();
 
 void (async () => {
+  document.body.dataset.platform = window.jarvis.platform;
+  initSessions();
   const view = await window.jarvis.getSettings();
   initSettings(view, applySettings);
   applySettings(view);
+  const session = await window.jarvis.getCurrentSession();
+  const sessions = await window.jarvis.listSessions();
+  await applySession(session, sessions);
   if (!view.model) {
     openSettings("No provider configured. Point Jarvis at your model to bring it online.");
   }
